@@ -1,7 +1,8 @@
 package runtime
 
 /*
-#cgo pkg-config: python3
+#cgo CFLAGS: -I${SRCDIR}/../../python_includes
+#cgo LDFLAGS: -L${SRCDIR}/../../python_libs -lpython3.12
 #include <Python.h>
 
 void executePythonCode(const char* code) {
@@ -11,13 +12,8 @@ void executePythonCode(const char* code) {
 }
 */
 import "C"
-import (
-	"enhanced_python_compiler/internal/parser"
-)
 
-func ExecuteCPython(ast *parser.AST) (string, error) {
-	// 這裡我們可以先將 AST 轉換為 Python 源代碼（未實現）
-	// 然後使用 C.executePythonCode 調用
-	C.executePythonCode(C.CString("print('Hello from CPython')"))
+func ExecuteCPython(code string) (string, error) {
+	C.executePythonCode(C.CString(code))
 	return "Executed by CPython", nil
 }
