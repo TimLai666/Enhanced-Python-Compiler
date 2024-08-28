@@ -11,20 +11,28 @@ type AST struct {
 }
 
 func ParsePythonCode(sourceCode []byte) (*AST, error) {
-	// 使用 Python 代码生成 JSON 格式的 AST
+	// 使用 Python 生成 JSON 格式的 AST
 	cmd := exec.Command("python3", "-c", fmt.Sprintf(`
 import ast, json, sys
 parsed = ast.parse('''%s''')
-print(json.dumps(ast.dump(parsed, annotate_fields=True, include_attributes=True)))
+def ast_to_dict(node):
+    if isinstance(node, list):
+        return [ast_to_dict(item) for item in node]
+    elif isinstance(node, ast.AST):
+        result = {"_type": node.__class__.__name__}
+        for field in node._fields:
+            result[field] = ast_to_dict(getattr(node, field))
+        return result
+    else:
+        return node
+print(json.dumps(ast_to_dict(parsed), indent=2))
 `, sourceCode))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse Python source code: %v", err)
+		return nil, fmt.Errorf("failed to parse Python source code: %v\n%s", err, output)
 	}
 
-	// 打印出原始的AST
-	fmt.Println("Generated AST:", string(output))
-
+	// 将生成的 JSON 解析为 Go 数据结构
 	var astRoot interface{}
 	err = json.Unmarshal(output, &astRoot)
 	if err != nil {
