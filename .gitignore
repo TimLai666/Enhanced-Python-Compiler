@@ -2,3 +2,7 @@
 compiler
 output.go
 output_binary
+/build
+temp_unconverted.py
+temp_unconverted.spec
+/dist
