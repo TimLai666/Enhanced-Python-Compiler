@@ -5,7 +5,6 @@ import (
 	"enhanced_python_compiler/internal/parser"
 	"enhanced_python_compiler/internal/translator"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 )
@@ -40,7 +39,7 @@ func main() {
 	}
 
 	// 保存无法转换的部分为临时 Python 文件
-	err = ioutil.WriteFile("temp_unconverted.py", code, 0644)
+	err = os.WriteFile("temp_unconverted.py", code, 0644)
 	if err != nil {
 		fmt.Printf("Error writing unconverted Python code: %v\n", err)
 		return
