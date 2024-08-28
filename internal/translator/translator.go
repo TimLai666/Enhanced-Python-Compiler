@@ -2,14 +2,23 @@ package translator
 
 import (
 	"enhanced_python_compiler/internal/parser"
+	"fmt"
+	"strings"
 )
 
-func TranslateToGo(ast *parser.AST) (string, error) {
-	// 簡單地將 AST 轉換為 Go 代碼，初期只處理基本結構
-	// 這部分需要進一步設計如何進行語法映射
-	// 需要與你討論如何劃分可以轉換的結構
+// TranslateASTToGo 將 Python 的 AST 轉換為 Go 代碼
+func TranslateASTToGo(ast *parser.AST) (string, error) {
+	// 初始 Go 代碼模板
+	goCode := "package main\n\nimport \"fmt\"\n\nfunc main() {\n"
 
-	// 示例：將簡單的加法轉換
-	goCode := "package main\n\nfunc main() {\n\tresult := 1 + 1\n\tprintln(result)\n}"
+	// 處理 AST 的字符串表示
+	if strings.Contains(ast.Root, "Call(func=Name(id='print'") {
+		// 假設我們可以將 print 語句簡單轉換為 fmt.Println
+		goCode += "\tfmt.Println(\"Hello from Go!\")\n"
+	} else {
+		return "", fmt.Errorf("unsupported AST structure: %v", ast.Root)
+	}
+
+	goCode += "}\n"
 	return goCode, nil
 }

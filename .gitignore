@@ -1,2 +1,4 @@
 
 compiler
+output.go
+output_binary
