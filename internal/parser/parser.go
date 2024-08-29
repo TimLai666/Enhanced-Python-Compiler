@@ -7,32 +7,22 @@ import (
 )
 
 type AST struct {
-	Root interface{} // 使用 interface{} 以便处理复杂结构
+	Root interface{} // 這裡使用 interface{} 來處理 AST 的各種結構
 }
 
+// ParsePythonCode 解析 Python 代碼並返回 AST 結構
 func ParsePythonCode(sourceCode []byte) (*AST, error) {
-	// 使用 Python 生成 JSON 格式的 AST
+	// 使用 Python 的 ast 模塊來生成 JSON 格式的 AST
 	cmd := exec.Command("python3", "-c", fmt.Sprintf(`
 import ast, json, sys
 parsed = ast.parse('''%s''')
-def ast_to_dict(node):
-    if isinstance(node, list):
-        return [ast_to_dict(item) for item in node]
-    elif isinstance(node, ast.AST):
-        result = {"_type": node.__class__.__name__}
-        for field in node._fields:
-            result[field] = ast_to_dict(getattr(node, field))
-        return result
-    else:
-        return node
-print(json.dumps(ast_to_dict(parsed), indent=2))
+print(json.dumps(ast.dump(parsed, annotate_fields=True, include_attributes=True)))
 `, sourceCode))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse Python source code: %v\n%s", err, output)
+		return nil, fmt.Errorf("failed to parse Python source code: %v\nOutput: %s", err, output)
 	}
 
-	// 将生成的 JSON 解析为 Go 数据结构
 	var astRoot interface{}
 	err = json.Unmarshal(output, &astRoot)
 	if err != nil {
