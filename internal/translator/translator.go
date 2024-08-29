@@ -66,19 +66,26 @@ func handleFunctionDef(stmtMap map[string]interface{}) string {
 			if stmtMap, ok := stmt.(map[string]interface{}); ok {
 				if stmtType, ok := stmtMap["_type"].(string); ok {
 					switch stmtType {
-					case "Return":
-						code += handleReturn(stmtMap)
-					case "Expr":
-						code += handleExpr(stmtMap)
-					case "Assign":
-						code += handleAssign(stmtMap)
+					case "Import":
+						code += handleImport(stmtMap)
+					case "FunctionDef":
+						code += handleFunctionDef(stmtMap)
 					case "If":
 						code += handleIf(stmtMap)
+					case "Assign":
+						code += handleAssign(stmtMap)
+					case "Return":
+						code += handleReturn(stmtMap)
+					case "Try":
+						code += handleTry(stmtMap) // 添加這一行
+					case "For":
+						code += handleFor(stmtMap) // 添加這一行
 					default:
 						stmtJson, _ := json.MarshalIndent(stmtMap, "", "  ")
-						fmt.Printf("Unsupported function statement type encountered: %s\nDetails: %s\n", stmtType, string(stmtJson))
-						code += fmt.Sprintf("// Unsupported function statement type: %s\n", stmtType)
+						fmt.Printf("Unsupported statement type encountered: %s\nDetails: %s\n", stmtType, string(stmtJson))
+						code += fmt.Sprintf("// Unsupported statement type: %s\n", stmtType)
 					}
+
 				} else {
 					fmt.Println("Unknown function statement type found")
 					code += "// Unknown function statement type\n"
@@ -91,6 +98,24 @@ func handleFunctionDef(stmtMap map[string]interface{}) string {
 	}
 	code += "}\n"
 	return code
+}
+
+func processStatement(stmtMap map[string]interface{}) string {
+	if stmtType, ok := stmtMap["_type"].(string); ok {
+		switch stmtType {
+		case "Assign":
+			return handleAssign(stmtMap)
+		case "Return":
+			return handleReturn(stmtMap)
+		case "If":
+			return handleIf(stmtMap)
+		// 添加其他語句類型的處理
+		default:
+			stmtJson, _ := json.MarshalIndent(stmtMap, "", "  ")
+			return fmt.Sprintf("// Unsupported statement type: %s\nDetails: %s\n", stmtType, string(stmtJson))
+		}
+	}
+	return "// Unknown statement type\n"
 }
 
 // 處理返回語句
@@ -195,6 +220,42 @@ func handleIf(stmtMap map[string]interface{}) string {
 	}
 
 	return "// Skipping unsupported If statement\n"
+}
+
+func handleTry(stmtMap map[string]interface{}) string {
+	// 基本模板：Go 中沒有原生的 Try-Catch 結構，因此需要用 defer 和 recover 模擬
+	code := "defer func() {\n"
+	code += "\tif r := recover(); r != nil {\n"
+	// 這裡可以加上處理 `handlers` 部分的邏輯
+	code += "\t\tfmt.Println(\"Recovered from error\")\n"
+	code += "\t}\n"
+	code += "}()\n"
+
+	if body, ok := stmtMap["body"].([]interface{}); ok {
+		for _, stmt := range body {
+			if stmtMap, ok := stmt.(map[string]interface{}); ok {
+				code += processStatement(stmtMap) // 假設 processStatement 是您用來處理各種語句的通用函數
+			}
+		}
+	}
+	return code
+}
+
+func handleFor(stmtMap map[string]interface{}) string {
+	// 基本模板：將 Python 的 For 轉換為 Go 的 for range 結構
+	iter := stmtMap["iter"].(map[string]interface{})["id"].(string)
+	target := stmtMap["target"].(map[string]interface{})["id"].(string)
+
+	code := fmt.Sprintf("for _, %s := range %s {\n", target, iter)
+	if body, ok := stmtMap["body"].([]interface{}); ok {
+		for _, stmt := range body {
+			if stmtMap, ok := stmt.(map[string]interface{}); ok {
+				code += processStatement(stmtMap) // 假設 processStatement 是您用來處理各種語句的通用函數
+			}
+		}
+	}
+	code += "}\n"
+	return code
 }
 
 func TranslateASTToBinary(ast *parser.AST) ([]byte, bool, error) {
