@@ -123,20 +123,6 @@ func handleFunctionDef(stmtMap map[string]interface{}) string {
 
 // 處理返回語句
 func handleReturn(stmtMap map[string]interface{}) string {
-	if value, ok := stmtMap["value"].(map[string]interface{}); ok {
-		switch valueType := value["_type"].(string); valueType {
-		case "Constant":
-			if constValue, ok := value["value"].(string); ok {
-				return fmt.Sprintf("\treturn \"%s\"\n", constValue)
-			}
-		case "Name":
-			if varName, ok := value["id"].(string); ok {
-				return fmt.Sprintf("\treturn %s\n", varName)
-			}
-		default:
-			return fmt.Sprintf("\treturn nil\n")
-		}
-	}
 	return "\treturn nil\n"
 }
 
@@ -159,15 +145,15 @@ func handleAssign(stmtMap map[string]interface{}) string {
 					case "Call":
 						if funcCall, ok := value["func"].(map[string]interface{}); ok {
 							if funcName, ok := funcCall["id"].(string); ok {
-								return fmt.Sprintf("\t%s := %s()\n", targetName, funcName)
+								return fmt.Sprintf("\t%s := %s(); _ = %s\n", targetName, funcName, targetName)
 							}
 						}
 					case "Name":
 						if varName, ok := value["id"].(string); ok {
-							return fmt.Sprintf("\t%s := %s\n", targetName, varName)
+							return fmt.Sprintf("\t%s := %s; _ = %s\n", targetName, varName, targetName)
 						}
 					case "List":
-						return fmt.Sprintf("\t%s := []interface{}{}\n", targetName)
+						return fmt.Sprintf("\t%s := []interface{}{}; _ = %s\n", targetName, targetName)
 					}
 				}
 			}
@@ -203,7 +189,6 @@ func handleIf(stmtMap map[string]interface{}) string {
 	return "// Skipping unsupported If statement\n"
 }
 
-// 處理 try 語句
 func handleTry(stmtMap map[string]interface{}) string {
 	// 基本模板：Go 中沒有原生的 Try-Catch 結構，因此需要用 defer 和 recover 模擬
 	code := "defer func() {\n"
@@ -216,24 +201,33 @@ func handleTry(stmtMap map[string]interface{}) string {
 	if body, ok := stmtMap["body"].([]interface{}); ok {
 		for _, stmt := range body {
 			if stmtMap, ok := stmt.(map[string]interface{}); ok {
-				code += processStatement(stmtMap) // 處理 try 內部的語句
+				code += processStatement(stmtMap)
 			}
 		}
 	}
 	return code
 }
 
-// 處理 for 語句
 func handleFor(stmtMap map[string]interface{}) string {
 	// 基本模板：將 Python 的 For 轉換為 Go 的 for range 結構
-	iter := stmtMap["iter"].(map[string]interface{})["id"].(string)
-	target := stmtMap["target"].(map[string]interface{})["id"].(string)
+	iter := "_"
+	if iterValue, ok := stmtMap["iter"].(map[string]interface{}); ok {
+		if iterName, ok := iterValue["id"].(string); ok {
+			iter = iterName
+		}
+	}
+	target := "_"
+	if targetValue, ok := stmtMap["target"].(map[string]interface{}); ok {
+		if targetName, ok := targetValue["id"].(string); ok {
+			target = targetName
+		}
+	}
 
 	code := fmt.Sprintf("for _, %s := range %s {\n", target, iter)
 	if body, ok := stmtMap["body"].([]interface{}); ok {
 		for _, stmt := range body {
 			if stmtMap, ok := stmt.(map[string]interface{}); ok {
-				code += processStatement(stmtMap) // 處理 for 內部的語句
+				code += processStatement(stmtMap)
 			}
 		}
 	}
@@ -241,7 +235,28 @@ func handleFor(stmtMap map[string]interface{}) string {
 	return code
 }
 
-// 處理單個語句的函數
+func generateMainFunction() string {
+	return "func main() {\n\t// 程序入口點\n}\n"
+}
+
+func TranslateASTToBinary(ast *parser.AST) ([]byte, bool, error) {
+	var rootMap map[string]interface{}
+
+	// 将 ast.Root（JSON 字符串）转换为 Go 结构
+	if err := json.Unmarshal([]byte(ast.Root), &rootMap); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal AST root: %v", err)
+	}
+
+	// 此處進行相應的轉換處理，例如將 AST 轉換為 Go 代碼
+	goCode, err := TranslateASTToGo(rootMap)
+	if err != nil {
+		return nil, false, fmt.Errorf("error translating AST to Go: %v", err)
+	}
+
+	// 返回轉換後的 Go 代碼
+	return []byte(goCode), true, nil
+}
+
 func processStatement(stmtMap map[string]interface{}) string {
 	if stmtType, ok := stmtMap["_type"].(string); ok {
 		switch stmtType {
@@ -257,28 +272,4 @@ func processStatement(stmtMap map[string]interface{}) string {
 		}
 	}
 	return "// Unknown statement type\n"
-}
-
-// 生成主函數
-func generateMainFunction() string {
-	return "func main() {\n\t// 程序入口點\n}\n"
-}
-
-// TranslateASTToBinary 轉換 AST 為二進位
-func TranslateASTToBinary(ast *parser.AST) ([]byte, bool, error) {
-	var rootMap map[string]interface{}
-
-	// 將 ast.Root（JSON 字符串）轉換為 Go 結構
-	if err := json.Unmarshal([]byte(ast.Root), &rootMap); err != nil {
-		return nil, false, fmt.Errorf("failed to unmarshal AST root: %v", err)
-	}
-
-	// 將 AST 轉換為 Go 代碼
-	goCode, err := TranslateASTToGo(rootMap)
-	if err != nil {
-		return nil, false, fmt.Errorf("error translating AST to Go: %v", err)
-	}
-
-	// 返回轉換後的 Go 代碼
-	return []byte(goCode), true, nil
 }
