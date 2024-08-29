@@ -1,4 +1,4 @@
-[繁體中文](https://github.com/TimLai666/Enhanced-Python-Compiler/README.md#%E5%BC%B7%E5%8C%96%E7%89%88-python-%E7%B7%A8%E8%AD%AF%E5%99%A8%E5%B0%88%E6%A1%88)
+[繁體中文]([https://github.com/TimLai666/Enhanced-Python-Compiler/README.md#%E5%BC%B7%E5%8C%96%E7%89%88-python-%E7%B7%A8%E8%AD%AF%E5%99%A8%E5%B0%88%E6%A1%88](https://github.com/TimLai666/Enhanced-Python-Compiler?tab=readme-ov-file#%E5%BC%B7%E5%8C%96%E7%89%88-python-%E7%B7%A8%E8%AD%AF%E5%99%A8%E5%B0%88%E6%A1%88))
 ### Enhanced Python Compiler Project
 
 ---
