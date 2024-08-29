@@ -8,20 +8,7 @@ import (
 )
 
 // TranslateASTToGo 將 Python 的 AST 轉換為 Go 代碼
-func TranslateASTToGo(ast *parser.AST) (string, error) {
-	var rootMap map[string]interface{}
-
-	// 將 AST 的根節點轉換為 Go 的 map 結構
-	rootJson, err := json.Marshal(ast.Root)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal AST root: %v", err)
-	}
-
-	err = json.Unmarshal(rootJson, &rootMap)
-	if err != nil {
-		return "", fmt.Errorf("failed to unmarshal AST root: %v", err)
-	}
-
+func TranslateASTToGo(rootMap map[string]interface{}) (string, error) {
 	goCode := "package main\n\nimport \"fmt\"\n\n"
 
 	// 處理 AST 的頂層 Module 節點
@@ -211,9 +198,19 @@ func handleIf(stmtMap map[string]interface{}) string {
 }
 
 func TranslateASTToBinary(ast *parser.AST) ([]byte, bool, error) {
-	goCode, err := TranslateASTToGo(ast)
+	var rootMap map[string]interface{}
+
+	// 将 ast.Root（JSON 字符串）转换为 Go 结构
+	if err := json.Unmarshal([]byte(ast.Root), &rootMap); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal AST root: %v", err)
+	}
+
+	// 此處進行相應的轉換處理，例如將 AST 轉換為 Go 代碼
+	goCode, err := TranslateASTToGo(rootMap)
 	if err != nil {
 		return nil, false, fmt.Errorf("error translating AST to Go: %v", err)
 	}
-	return []byte(goCode), false, nil
+
+	// 返回轉換後的 Go 代碼
+	return []byte(goCode), true, nil
 }
