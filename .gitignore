@@ -6,3 +6,4 @@ output_binary
 temp_unconverted.py
 temp_unconverted.spec
 /dist
+compiler.exe
