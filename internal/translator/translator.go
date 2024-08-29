@@ -11,6 +11,8 @@ import (
 func TranslateASTToGo(rootMap map[string]interface{}) (string, error) {
 	goCode := "package main\n\nimport \"fmt\"\n\n"
 
+	mainDefined := false // 用於避免重複定義 main 函數
+
 	// 處理 AST 的頂層 Module 節點
 	if body, ok := rootMap["body"].([]interface{}); ok {
 		for _, stmt := range body {
@@ -21,7 +23,17 @@ func TranslateASTToGo(rootMap map[string]interface{}) (string, error) {
 					case "Import":
 						goCode += handleImport(stmtMap)
 					case "FunctionDef":
-						goCode += handleFunctionDef(stmtMap)
+						funcCode := handleFunctionDef(stmtMap)
+						if strings.Contains(funcCode, "func main()") {
+							if !mainDefined {
+								goCode += funcCode
+								mainDefined = true
+							} else {
+								fmt.Println("Skipping additional main function.")
+							}
+						} else {
+							goCode += funcCode
+						}
 					case "If":
 						goCode += handleIf(stmtMap)
 					case "Assign":
@@ -46,7 +58,14 @@ func TranslateASTToGo(rootMap map[string]interface{}) (string, error) {
 		return "", fmt.Errorf("unsupported AST structure: body not found")
 	}
 
-	goCode += "func main() {\n\tmain()\n}\n"
+	// 確保只有一個 main 函數
+	if !mainDefined {
+		goCode += generateMainFunction()
+	}
+
+	fmt.Println("Generated Go code:")
+	fmt.Println(goCode)
+
 	return goCode, nil
 }
 
@@ -66,26 +85,21 @@ func handleFunctionDef(stmtMap map[string]interface{}) string {
 			if stmtMap, ok := stmt.(map[string]interface{}); ok {
 				if stmtType, ok := stmtMap["_type"].(string); ok {
 					switch stmtType {
-					case "Import":
-						code += handleImport(stmtMap)
-					case "FunctionDef":
-						code += handleFunctionDef(stmtMap)
-					case "If":
-						code += handleIf(stmtMap)
 					case "Assign":
 						code += handleAssign(stmtMap)
 					case "Return":
 						code += handleReturn(stmtMap)
+					case "If":
+						code += handleIf(stmtMap)
 					case "Try":
-						code += handleTry(stmtMap) // 添加這一行
+						code += handleTry(stmtMap)
 					case "For":
-						code += handleFor(stmtMap) // 添加這一行
+						code += handleFor(stmtMap)
 					default:
 						stmtJson, _ := json.MarshalIndent(stmtMap, "", "  ")
 						fmt.Printf("Unsupported statement type encountered: %s\nDetails: %s\n", stmtType, string(stmtJson))
 						code += fmt.Sprintf("// Unsupported statement type: %s\n", stmtType)
 					}
-
 				} else {
 					fmt.Println("Unknown function statement type found")
 					code += "// Unknown function statement type\n"
@@ -96,26 +110,15 @@ func handleFunctionDef(stmtMap map[string]interface{}) string {
 			}
 		}
 	}
-	code += "}\n"
-	return code
-}
 
-func processStatement(stmtMap map[string]interface{}) string {
-	if stmtType, ok := stmtMap["_type"].(string); ok {
-		switch stmtType {
-		case "Assign":
-			return handleAssign(stmtMap)
-		case "Return":
-			return handleReturn(stmtMap)
-		case "If":
-			return handleIf(stmtMap)
-		// 添加其他語句類型的處理
-		default:
-			stmtJson, _ := json.MarshalIndent(stmtMap, "", "  ")
-			return fmt.Sprintf("// Unsupported statement type: %s\nDetails: %s\n", stmtType, string(stmtJson))
-		}
+	code += "}\n"
+
+	// 針對函數名稱為 main 的特殊處理，避免重複定義
+	if functionName == "main" {
+		return generateMainFunction()
 	}
-	return "// Unknown statement type\n"
+
+	return code
 }
 
 // 處理返回語句
@@ -130,36 +133,11 @@ func handleReturn(stmtMap map[string]interface{}) string {
 			if varName, ok := value["id"].(string); ok {
 				return fmt.Sprintf("\treturn %s\n", varName)
 			}
+		default:
+			return fmt.Sprintf("\treturn nil\n")
 		}
 	}
-	return "\treturn\n"
-}
-
-// 處理表達式語句
-func handleExpr(stmtMap map[string]interface{}) string {
-	if value, ok := stmtMap["value"].(map[string]interface{}); ok {
-		switch valueType := value["_type"].(string); valueType {
-		case "Call":
-			if funcCall, ok := value["func"].(map[string]interface{}); ok {
-				if funcName, ok := funcCall["id"].(string); ok && funcName == "print" {
-					if args, ok := value["args"].([]interface{}); ok && len(args) > 0 {
-						var printArgs []string
-						for _, arg := range args {
-							if argMap, ok := arg.(map[string]interface{}); ok {
-								if constValue, ok := argMap["value"].(string); ok {
-									printArgs = append(printArgs, fmt.Sprintf("\"%s\"", constValue))
-								} else if varName, ok := argMap["id"].(string); ok {
-									printArgs = append(printArgs, varName)
-								}
-							}
-						}
-						return fmt.Sprintf("\tfmt.Println(%s)\n", strings.Join(printArgs, ", "))
-					}
-				}
-			}
-		}
-	}
-	return "// Skipping unsupported expression\n"
+	return "\treturn nil\n"
 }
 
 // 處理賦值語句
@@ -167,26 +145,29 @@ func handleAssign(stmtMap map[string]interface{}) string {
 	if targets, ok := stmtMap["targets"].([]interface{}); ok {
 		if len(targets) > 0 {
 			if target, ok := targets[0].(map[string]interface{}); ok {
-				if targetName, ok := target["id"].(string); ok {
-					if value, ok := stmtMap["value"].(map[string]interface{}); ok {
-						switch valueType := value["_type"].(string); valueType {
-						case "Constant":
-							if constValue, ok := value["value"].(string); ok {
-								return fmt.Sprintf("\t%s := \"%s\"\n", targetName, constValue)
-							}
-						case "Call":
-							if funcCall, ok := value["func"].(map[string]interface{}); ok {
-								if funcName, ok := funcCall["id"].(string); ok {
-									return fmt.Sprintf("\t%s := %s()\n", targetName, funcName)
-								}
-							}
-						case "Name":
-							if varName, ok := value["id"].(string); ok {
-								return fmt.Sprintf("\t%s := %s\n", targetName, varName)
-							}
-						case "List":
-							return fmt.Sprintf("\t%s := []interface{}{}\n", targetName)
+				targetName := "_"
+				if tn, ok := target["id"].(string); ok {
+					targetName = tn
+				}
+
+				if value, ok := stmtMap["value"].(map[string]interface{}); ok {
+					switch valueType := value["_type"].(string); valueType {
+					case "Constant":
+						if constValue, ok := value["value"].(string); ok {
+							return fmt.Sprintf("\t%s := \"%s\"\n", targetName, constValue)
 						}
+					case "Call":
+						if funcCall, ok := value["func"].(map[string]interface{}); ok {
+							if funcName, ok := funcCall["id"].(string); ok {
+								return fmt.Sprintf("\t%s := %s()\n", targetName, funcName)
+							}
+						}
+					case "Name":
+						if varName, ok := value["id"].(string); ok {
+							return fmt.Sprintf("\t%s := %s\n", targetName, varName)
+						}
+					case "List":
+						return fmt.Sprintf("\t%s := []interface{}{}\n", targetName)
 					}
 				}
 			}
@@ -222,6 +203,7 @@ func handleIf(stmtMap map[string]interface{}) string {
 	return "// Skipping unsupported If statement\n"
 }
 
+// 處理 try 語句
 func handleTry(stmtMap map[string]interface{}) string {
 	// 基本模板：Go 中沒有原生的 Try-Catch 結構，因此需要用 defer 和 recover 模擬
 	code := "defer func() {\n"
@@ -234,13 +216,14 @@ func handleTry(stmtMap map[string]interface{}) string {
 	if body, ok := stmtMap["body"].([]interface{}); ok {
 		for _, stmt := range body {
 			if stmtMap, ok := stmt.(map[string]interface{}); ok {
-				code += processStatement(stmtMap) // 假設 processStatement 是您用來處理各種語句的通用函數
+				code += processStatement(stmtMap) // 處理 try 內部的語句
 			}
 		}
 	}
 	return code
 }
 
+// 處理 for 語句
 func handleFor(stmtMap map[string]interface{}) string {
 	// 基本模板：將 Python 的 For 轉換為 Go 的 for range 結構
 	iter := stmtMap["iter"].(map[string]interface{})["id"].(string)
@@ -250,7 +233,7 @@ func handleFor(stmtMap map[string]interface{}) string {
 	if body, ok := stmtMap["body"].([]interface{}); ok {
 		for _, stmt := range body {
 			if stmtMap, ok := stmt.(map[string]interface{}); ok {
-				code += processStatement(stmtMap) // 假設 processStatement 是您用來處理各種語句的通用函數
+				code += processStatement(stmtMap) // 處理 for 內部的語句
 			}
 		}
 	}
@@ -258,15 +241,39 @@ func handleFor(stmtMap map[string]interface{}) string {
 	return code
 }
 
+// 處理單個語句的函數
+func processStatement(stmtMap map[string]interface{}) string {
+	if stmtType, ok := stmtMap["_type"].(string); ok {
+		switch stmtType {
+		case "Assign":
+			return handleAssign(stmtMap)
+		case "Return":
+			return handleReturn(stmtMap)
+		case "If":
+			return handleIf(stmtMap)
+		default:
+			stmtJson, _ := json.MarshalIndent(stmtMap, "", "  ")
+			return fmt.Sprintf("// Unsupported statement type: %s\nDetails: %s\n", stmtType, string(stmtJson))
+		}
+	}
+	return "// Unknown statement type\n"
+}
+
+// 生成主函數
+func generateMainFunction() string {
+	return "func main() {\n\t// 程序入口點\n}\n"
+}
+
+// TranslateASTToBinary 轉換 AST 為二進位
 func TranslateASTToBinary(ast *parser.AST) ([]byte, bool, error) {
 	var rootMap map[string]interface{}
 
-	// 将 ast.Root（JSON 字符串）转换为 Go 结构
+	// 將 ast.Root（JSON 字符串）轉換為 Go 結構
 	if err := json.Unmarshal([]byte(ast.Root), &rootMap); err != nil {
 		return nil, false, fmt.Errorf("failed to unmarshal AST root: %v", err)
 	}
 
-	// 此處進行相應的轉換處理，例如將 AST 轉換為 Go 代碼
+	// 將 AST 轉換為 Go 代碼
 	goCode, err := TranslateASTToGo(rootMap)
 	if err != nil {
 		return nil, false, fmt.Errorf("error translating AST to Go: %v", err)
